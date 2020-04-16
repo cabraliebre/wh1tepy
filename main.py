@@ -1,7 +1,6 @@
 import time                                   #https://docs.micropython.org/en/v1.5/pyboard/library/time.html
 import sys                                    #https://docs.micropython.org/en/v1.5/pyboard/library/sys.html
-#from lib.umqtt.simple2 import MQTTClient      #https://github.com/fizista/micropython-umqtt.simple2
-from umqttsimple import MQTTClient
+from umqtt.simple import MQTTClient
 import ubinascii
 import machine                                #https://docs.micropython.org/en/latest/library/machine.html
 from machine import Pin, RTC, Timer, PWM
@@ -18,8 +17,10 @@ import os
 
 ############################ Global Variables ###################################
 
+client_id = str(ubinascii.hexlify(machine.unique_id()))[-7:-1].upper()
+
 #MQTT Topics
-global client_id, station
+global station
 
 prefix_topic = b'vick-dev/'
 main_topic = prefix_topic + b'wh1tepy/WH1TEPY-' + client_id
@@ -38,10 +39,10 @@ counter = 0
 f_pub_sys = 0
 
 #GPIO
-global omap, omap_pin, state_omap, last_state_omap
-global imap, imap_pin, state_imap, last_state_imap
+global OMAP, state_omap, last_state_omap
+global IMAP, state_imap, last_state_imap
 
-global year, month, mday, weekday, hour, minute, second, milisecond
+#(year, month, mday, weekday, hour, minute, second, milisecond) = 0,0,0,0,0,0,0,0
 
 #scheduler
 sch0 = {}
@@ -79,17 +80,17 @@ def test(timer):
 
 def write_outputs():
     if (state_omap != last_state_omap):
-        for i in range(0,len(omap)):
+        for i in range(0,len(OMAP)):
             if (state_omap[i] != last_state_omap[i]):
                 last_state_omap[i] = state_omap[i]
-                omap[i].value(state_omap[i])
+                OMAP[i].value(state_omap[i])
                 
                 print('output %d : %d' % (i, state_omap[i]))
                 pub((b'/digital-outputs/%d' % i), str(state_omap[i]), True)
 
 def read_inputs(first):
-    for i in range(0,len(imap)):
-        state_imap[i] = imap[i].value()
+    for i in range(0,len(IMAP)):
+        state_imap[i] = IMAP[i].value()
         if (state_imap[i] != last_state_imap[i]):
             last_state_imap[i] = state_imap[i]
             if (not first):
@@ -172,7 +173,7 @@ def pub_info():
 
 def mqtt_subs():
     mqtt.subscribe(main_topic + b'/digital-outputs/set')
-    for i in range(0, len(omap)):
+    for i in range(0, len(OMAP)):
         mqtt.subscribe(main_topic + (b'/scheduler/%d/set') % i)
         mqtt.subscribe(main_topic + (b'/scheduler/%d/get') % i)
         
@@ -313,19 +314,19 @@ def pub_switchs():
         switch_discovery(str(i))
         
 def pub_bsensor():
-    for i in range(0, len(imap)):
+    for i in range(0, len(IMAP)):
         bsensor_discovery(str(i))        
         
 #SCHEDULER        
 def load_sch():
-    for i in range(0, len(omap)):
+    for i in range(0, len(OMAP)):
         sch = "sch" + str(i)
         if (sch + ".json" in os.listdir("scheduler/")):
             path = "scheduler/" + sch + ".json"
             f=open(path,"r")
             sch = ujson.loads(f.read())
             f.close()
-            print('load sch%d'% i)
+            print('load sch%d: %s'% (i, sch))
             pub((b'/scheduler/%d/storage' % i), "INIT", True)
         else:
             print('not exist ',sch)
